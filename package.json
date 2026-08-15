@@ -1,1 +1,9 @@
-
+{
+  "name": "sinator-nuvio-catalog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stremio/Nuvio katalogový doplněk napojený na sinator-backend (watchlist, historie, rozkoukané, hodnocení, vlastní složky).",
+  "engines": {
+    "node": ">=18.x"
+  }
+}
