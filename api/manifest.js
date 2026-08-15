@@ -9,7 +9,7 @@ module.exports = async function handler(req, res) {
   const manifest = {
     id: 'cz.sinator.nuvio.catalog',
     version: '1.0.0',
-    name: 'Sinator',
+    name: 'Sinator Katalogy',
     description: 'Katalogy z tvého Sinator backendu — sledované, watchlist, rozkoukané, hodnocení a vlastní složky.',
     resources: ['catalog', 'meta'],
     types: ['movie', 'series'],
