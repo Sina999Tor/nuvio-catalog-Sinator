@@ -51,8 +51,10 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
 - U watchlistu se poster/název berou primárně z backendu (pokud je appka
   uložila); pokud chybí, doplní se z TMDB stejně jako u ostatních katalogů.
 - Dotazy na TMDB jedou po dávkách (12 souběžně) s automatickým opakováním
-  při rate-limitu (HTTP 429) — u velkých seznamů (stovky/tisíce položek) to
-  může trvat déle, proto má `api/catalog.js` limit běhu nastavený na 60 s
-  (`vercel.json` → `functions.maxDuration`). Na Hobby plánu Vercelu je 60 s
-  strop; na placeném plánu jde nastavit i výš, kdyby to u extrémně velkých
-  seznamů (tisíce+ položek) pořád nestíhalo.
+  při rate-limitu (HTTP 429).
+- Katalogy jsou stránkované po 100 položkách (`skip` parametr) — u velkých
+  seznamů (stovky/tisíce položek) se první stránka natáhne během pár vteřin
+  a další se donačte samy při scrollování v Nuviu/Stremiu. Díky tomu to jede
+  spolehlivě i na Vercel Hobby plánu, který má tvrdý strop 10 s na běh jedné
+  funkce (nastavení `maxDuration: 60` v `vercel.json` mu na Hobby bez
+  zapnutého Fluid Compute nepomůže — proto stránkování, ne delší timeout).
