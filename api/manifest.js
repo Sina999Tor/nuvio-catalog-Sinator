@@ -1,60 +1,72 @@
 const { backendFetch } = require('../lib/backend');
+const { decodeConfig } = require('../lib/config');
 
 const BASE_URL = process.env.SINATOR_BACKEND_URL || 'https://sinator-backend.vercel.app';
 
+const ALL_STATIC_CATALOGS = [
+  { type: 'movie', id: 'sinator-history-movies', name: 'Sledované filmy' },
+  { type: 'series', id: 'sinator-history-shows', name: 'Sledované seriály' },
+  { type: 'movie', id: 'sinator-watchlist-movies', name: 'Watchlist filmy' },
+  { type: 'series', id: 'sinator-watchlist-series', name: 'Watchlist seriály' },
+  { type: 'movie', id: 'sinator-progress-movies', name: 'Rozkoukané filmy' },
+  { type: 'series', id: 'sinator-progress-shows', name: 'Rozkoukané seriály' },
+  { type: 'movie', id: 'sinator-ratings-movies', name: 'Oblíbené filmy' },
+  { type: 'series', id: 'sinator-ratings-shows', name: 'Oblíbené seriály' },
+];
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const key = req.query.key;
+  const config = decodeConfig(req.query.key);
 
   const manifest = {
     id: 'cz.sinator.nuvio.catalog',
-    version: '1.0.0',
+    version: '1.1.0',
     name: 'Sinator Katalogy',
     description: 'Katalogy z tvého Sinator backendu — sledované, watchlist, rozkoukané, hodnocení a vlastní složky.',
     resources: ['catalog', 'meta'],
     types: ['movie', 'series'],
     idPrefixes: ['tmdb-'],
     catalogs: [],
-    behaviorHints: { configurable: true, configurationRequired: !key },
+    behaviorHints: { configurable: true, configurationRequired: !config || !config.key },
   };
 
-  if (!key) {
+  if (!config || !config.key) {
     // Bez klíče vrátíme jen prázdný manifest s configurationRequired,
     // ať Stremio/Nuvio ukáže "Configure" a uživatel doplní API klíč.
     return res.status(200).json(manifest);
   }
 
-  const staticCatalogs = [
-    { type: 'movie', id: 'sinator-history-movies', name: 'Sinator – Sledované filmy' },
-    { type: 'series', id: 'sinator-history-shows', name: 'Sinator – Sledované seriály' },
-    { type: 'movie', id: 'sinator-watchlist-movies', name: 'Sinator – Watchlist filmy' },
-    { type: 'series', id: 'sinator-watchlist-series', name: 'Sinator – Watchlist seriály' },
-    { type: 'movie', id: 'sinator-progress-movies', name: 'Sinator – Rozkoukané filmy' },
-    { type: 'series', id: 'sinator-progress-shows', name: 'Sinator – Rozkoukané seriály' },
-    { type: 'movie', id: 'sinator-ratings-movies', name: 'Sinator – Oblíbené filmy' },
-    { type: 'series', id: 'sinator-ratings-shows', name: 'Sinator – Oblíbené seriály' },
-  ];
-  manifest.catalogs.push(...staticCatalogs);
+  // cats = seznam ID vybraných katalogů z configu; null/prázdné = všechny.
+  const enabled = Array.isArray(config.cats) && config.cats.length ? new Set(config.cats) : null;
 
-  // Moje složky = dynamické, natáhneme si je při generování manifestu,
-  // ať se v Nuviu/Stremiu objeví jako samostatné katalogy.
-  try {
-    const lists = await backendFetch(BASE_URL, key, '/api/lists');
-    for (const list of lists || []) {
-      manifest.catalogs.push({
-        type: 'movie',
-        id: `sinator-list-${list.id}-movie`,
-        name: `📁 ${list.name} (filmy)`,
-      });
-      manifest.catalogs.push({
-        type: 'series',
-        id: `sinator-list-${list.id}-series`,
-        name: `📁 ${list.name} (seriály)`,
-      });
+  for (const c of ALL_STATIC_CATALOGS) {
+    if (!enabled || enabled.has(c.id)) {
+      manifest.catalogs.push({ ...c, name: `Sinator Katalogy – ${c.name}` });
     }
-  } catch (e) {
-    // Backend nedostupný / špatný klíč — vrátíme aspoň statické katalogy,
-    // ať addon nespadne úplně.
+  }
+
+  // Moje složky = dynamické, natáhneme si je při generování manifestu.
+  // Dá se úplně vypnout přepínačem "lists" v configu.
+  const wantLists = config.lists !== false;
+  if (wantLists) {
+    try {
+      const lists = await backendFetch(BASE_URL, config.key, '/api/lists');
+      for (const list of lists || []) {
+        manifest.catalogs.push({
+          type: 'movie',
+          id: `sinator-list-${list.id}-movie`,
+          name: `Sinator Katalogy – 📁 ${list.name} (filmy)`,
+        });
+        manifest.catalogs.push({
+          type: 'series',
+          id: `sinator-list-${list.id}-series`,
+          name: `Sinator Katalogy – 📁 ${list.name} (seriály)`,
+        });
+      }
+    } catch (e) {
+      // Backend nedostupný / špatný klíč — vrátíme aspoň statické katalogy,
+      // ať addon nespadne úplně.
+    }
   }
 
   return res.status(200).json(manifest);
