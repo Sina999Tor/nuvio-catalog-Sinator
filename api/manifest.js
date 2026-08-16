@@ -20,7 +20,7 @@ module.exports = async function handler(req, res) {
 
   const manifest = {
     id: 'cz.sinator.nuvio.catalog',
-    version: '1.1.0',
+    version: '1.2.0',
     name: 'Sinator Katalogy',
     description: 'Katalogy z tvého Sinator backendu — sledované, watchlist, rozkoukané, hodnocení a vlastní složky.',
     resources: ['catalog', 'meta'],
@@ -41,7 +41,15 @@ module.exports = async function handler(req, res) {
 
   for (const c of ALL_STATIC_CATALOGS) {
     if (!enabled || enabled.has(c.id)) {
-      manifest.catalogs.push({ ...c, name: `Sinator Katalogy – ${c.name}` });
+      manifest.catalogs.push({
+        ...c,
+        name: `Sinator Katalogy – ${c.name}`,
+        // Podpora stránkování — u velkých seznamů (stovky+ položek) si
+        // Nuvio/Stremio při scrollování samo vyžádá další stránku (skip),
+        // místo aby čekalo na natažení a obohacení úplně všeho najednou.
+        extra: [{ name: 'skip', isRequired: false }],
+        extraSupported: ['skip'],
+      });
     }
   }
 
@@ -56,11 +64,15 @@ module.exports = async function handler(req, res) {
           type: 'movie',
           id: `sinator-list-${list.id}-movie`,
           name: `Sinator Katalogy – 📁 ${list.name} (filmy)`,
+          extra: [{ name: 'skip', isRequired: false }],
+          extraSupported: ['skip'],
         });
         manifest.catalogs.push({
           type: 'series',
           id: `sinator-list-${list.id}-series`,
           name: `Sinator Katalogy – 📁 ${list.name} (seriály)`,
+          extra: [{ name: 'skip', isRequired: false }],
+          extraSupported: ['skip'],
         });
       }
     } catch (e) {

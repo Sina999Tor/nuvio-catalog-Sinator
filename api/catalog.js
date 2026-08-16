@@ -5,6 +5,24 @@ const { decodeConfig } = require('../lib/config');
 const BASE_URL = process.env.SINATOR_BACKEND_URL || 'https://sinator-backend.vercel.app';
 const TMDB_KEY = process.env.TMDB_API_KEY;
 
+// Kolik položek se pošle na jeden request. Nuvio/Stremio si při scrollování
+// dolů samo vyžádá další stránku (parametr skip) — díky tomu i katalog s
+// 1300+ položkami zvládne Vercel Hobby (10s limit na běh funkce), protože
+// se na TMDB pokaždé ptáme jen na tuhle jednu stránku, ne na celý seznam.
+const PAGE_SIZE = 100;
+
+function parseSkip(extraRaw) {
+  if (!extraRaw) return 0;
+  try {
+    const decoded = decodeURIComponent(extraRaw);
+    const params = new URLSearchParams(decoded);
+    const skip = parseInt(params.get('skip') || '0', 10);
+    return Number.isFinite(skip) && skip > 0 ? skip : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 function watchlistToMeta(item) {
   return {
     id: `tmdb-${item.type === 'movie' ? 'movie' : 'tv'}-${item.id}`,
@@ -51,6 +69,8 @@ async function watchlistMetas(items, kind) {
 
 // Historii natáhneme po stránkách, dokud backend nevrátí kratší stránku
 // než limit — jinak by se u lidí s > 200 zhlédnutými položkami část ořízla.
+// Tohle je čtení z backendu (Redis) a je levné/rychlé samo o sobě — drahé
+// je až dotazování TMDB, to se dělá až na vyfiltrovanou stránku níž.
 async function fetchAllHistory(apiKey, type) {
   const limit = 200;
   let page = 1;
@@ -70,53 +90,64 @@ module.exports = async function handler(req, res) {
   const config = decodeConfig(req.query.key);
   if (!config || !config.key) return res.status(401).json({ metas: [] });
   const apiKey = config.key;
+  const skip = parseSkip(req.query.extra);
 
   try {
     let metas = [];
 
     if (id === 'sinator-history-movies') {
       const items = await fetchAllHistory(apiKey, 'movies');
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', latestUniqueIds(items, 'watched_at'));
+      const pageIds = latestUniqueIds(items, 'watched_at').slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-history-shows') {
       const [shows, episodes] = await Promise.all([
         fetchAllHistory(apiKey, 'shows'),
         fetchAllHistory(apiKey, 'episodes'),
       ]);
-      const ids = latestUniqueIds([...(shows || []), ...(episodes || [])], 'watched_at');
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', ids);
+      const pageIds = latestUniqueIds([...(shows || []), ...(episodes || [])], 'watched_at').slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
     } else if (id === 'sinator-watchlist-movies' || id === 'sinator-watchlist-series') {
       const wantType = id === 'sinator-watchlist-movies' ? 'movie' : 'tv';
-      const kind = wantType === 'movie' ? 'movie' : 'tv';
       const items = await backendFetch(BASE_URL, apiKey, '/api/watchlist');
       const filtered = (items || [])
         .filter((i) => i.type === wantType)
-        .sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
-      metas = await watchlistMetas(filtered, kind);
+        .sort((a, b) => (b.added_at || 0) - (a.added_at || 0))
+        .slice(skip, skip + PAGE_SIZE);
+      metas = await watchlistMetas(filtered, wantType);
     } else if (id === 'sinator-progress-movies') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/progress?type=movies');
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', (items || []).map((i) => i.id));
+      const pageIds = (items || []).map((i) => i.id).slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-progress-shows') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/progress?type=shows');
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', (items || []).map((i) => i.id));
+      const pageIds = (items || []).map((i) => i.id).slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
     } else if (id === 'sinator-ratings-movies') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/ratings?type=movies');
-      const ids = (items || []).sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0)).map((i) => i.id);
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', ids);
+      const pageIds = (items || [])
+        .sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0))
+        .map((i) => i.id)
+        .slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-ratings-shows') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/ratings?type=shows');
-      const ids = (items || []).sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0)).map((i) => i.id);
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', ids);
+      const pageIds = (items || [])
+        .sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0))
+        .map((i) => i.id)
+        .slice(skip, skip + PAGE_SIZE);
+      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
     } else if (id && id.startsWith('sinator-list-')) {
       const m = id.match(/^sinator-list-(.+)-(movie|series)$/);
       if (m) {
         const [, listId, kindLabel] = m;
         const wantType = kindLabel === 'movie' ? 'movie' : 'tv';
         const items = await backendFetch(BASE_URL, apiKey, `/api/lists/${encodeURIComponent(listId)}/items`);
-        const filtered = (items || [])
+        const pageIds = (items || [])
           .filter((i) => i.type === wantType)
           .sort((a, b) => (b.added_at || 0) - (a.added_at || 0))
-          .map((i) => i.id);
-        metas = await tmdbFetchMany(TMDB_KEY, wantType, filtered);
+          .map((i) => i.id)
+          .slice(skip, skip + PAGE_SIZE);
+        metas = await tmdbFetchMany(TMDB_KEY, wantType, pageIds);
       }
     }
 
