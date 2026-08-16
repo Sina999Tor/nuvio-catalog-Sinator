@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/catalog.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/manifest.json", "destination": "/api/manifest" },
     { "source": "/:key/manifest.json", "destination": "/api/manifest" },

@@ -50,3 +50,9 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
   jako jeden řádek za seriál, seřazeno podle posledního shlédnutí.
 - U watchlistu se poster/název berou primárně z backendu (pokud je appka
   uložila); pokud chybí, doplní se z TMDB stejně jako u ostatních katalogů.
+- Dotazy na TMDB jedou po dávkách (12 souběžně) s automatickým opakováním
+  při rate-limitu (HTTP 429) — u velkých seznamů (stovky/tisíce položek) to
+  může trvat déle, proto má `api/catalog.js` limit běhu nastavený na 60 s
+  (`vercel.json` → `functions.maxDuration`). Na Hobby plánu Vercelu je 60 s
+  strop; na placeném plánu jde nastavit i výš, kdyby to u extrémně velkých
+  seznamů (tisíce+ položek) pořád nestíhalo.
