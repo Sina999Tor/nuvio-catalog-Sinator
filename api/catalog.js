@@ -49,6 +49,21 @@ async function watchlistMetas(items, kind) {
   return items.map((it) => byId.get(String(it.id))).filter(Boolean);
 }
 
+// Historii natáhneme po stránkách, dokud backend nevrátí kratší stránku
+// než limit — jinak by se u lidí s > 200 zhlédnutými položkami část ořízla.
+async function fetchAllHistory(apiKey, type) {
+  const limit = 200;
+  let page = 1;
+  let all = [];
+  while (page <= 25) { // pojistka: max 5000 položek
+    const items = await backendFetch(BASE_URL, apiKey, `/api/history?type=${type}&page=${page}&limit=${limit}`);
+    all = all.concat(items || []);
+    if (!items || items.length < limit) break;
+    page++;
+  }
+  return all;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const { id } = req.query;
@@ -60,12 +75,12 @@ module.exports = async function handler(req, res) {
     let metas = [];
 
     if (id === 'sinator-history-movies') {
-      const items = await backendFetch(BASE_URL, apiKey, '/api/history?type=movies&limit=200');
+      const items = await fetchAllHistory(apiKey, 'movies');
       metas = await tmdbFetchMany(TMDB_KEY, 'movie', latestUniqueIds(items, 'watched_at'));
     } else if (id === 'sinator-history-shows') {
       const [shows, episodes] = await Promise.all([
-        backendFetch(BASE_URL, apiKey, '/api/history?type=shows&limit=200'),
-        backendFetch(BASE_URL, apiKey, '/api/history?type=episodes&limit=200'),
+        fetchAllHistory(apiKey, 'shows'),
+        fetchAllHistory(apiKey, 'episodes'),
       ]);
       const ids = latestUniqueIds([...(shows || []), ...(episodes || [])], 'watched_at');
       metas = await tmdbFetchMany(TMDB_KEY, 'tv', ids);
