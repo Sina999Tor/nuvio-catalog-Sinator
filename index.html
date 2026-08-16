@@ -3,29 +3,62 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sinator – doplněk pro Nuvio / Stremio</title>
+<title>Sinator Katalogy — doplněk pro Nuvio / Stremio</title>
 <style>
   body{font-family:system-ui,-apple-system,sans-serif;background:#111;color:#eee;max-width:560px;margin:40px auto;padding:0 16px;line-height:1.5;}
   h2{margin-bottom:4px;}
-  input{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #444;background:#1c1c1c;color:#eee;margin:8px 0;font-size:15px;}
+  input[type=text]{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #444;background:#1c1c1c;color:#eee;margin:8px 0;font-size:15px;}
   button{padding:10px 18px;border-radius:8px;border:0;background:#6090ff;color:#fff;cursor:pointer;font-weight:600;font-size:15px;}
   code{background:#1c1c1c;padding:6px 8px;border-radius:6px;display:block;word-break:break-all;margin:8px 0;font-size:13px;}
   a.install{display:inline-block;margin-top:10px;color:#6090ff;text-decoration:none;font-weight:600;}
   .hint{opacity:.65;font-size:.9em;margin-top:20px;}
+  fieldset{border:1px solid #333;border-radius:10px;padding:12px 14px;margin:16px 0;}
+  legend{padding:0 6px;opacity:.8;}
+  label{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:15px;}
+  label input{width:auto;margin:0;}
 </style>
 </head>
 <body>
-  <h2>🧩 Sinator — katalog pro Nuvio / Stremio</h2>
-  <p>Vlož svůj <code>x-api-key</code> ze <code>sinator-backend</code> a vygeneruj si instalační odkaz addonu.</p>
-  <input id="key" placeholder="API_SECRET">
+  <h2>🧩 Sinator Katalogy — Nuvio / Stremio</h2>
+  <p>Vlož svůj <code>x-api-key</code> ze <code>sinator-backend</code>, zvol katalogy a vygeneruj instalační odkaz.</p>
+  <input type="text" id="key" placeholder="API_SECRET">
+
+  <fieldset>
+    <legend>Katalogy k zobrazení</legend>
+    <label><input type="checkbox" class="cat" value="sinator-history-movies" checked> Sledované filmy</label>
+    <label><input type="checkbox" class="cat" value="sinator-history-shows" checked> Sledované seriály</label>
+    <label><input type="checkbox" class="cat" value="sinator-watchlist-movies" checked> Watchlist filmy</label>
+    <label><input type="checkbox" class="cat" value="sinator-watchlist-series" checked> Watchlist seriály</label>
+    <label><input type="checkbox" class="cat" value="sinator-progress-movies" checked> Rozkoukané filmy</label>
+    <label><input type="checkbox" class="cat" value="sinator-progress-shows" checked> Rozkoukané seriály</label>
+    <label><input type="checkbox" class="cat" value="sinator-ratings-movies" checked> Oblíbené filmy</label>
+    <label><input type="checkbox" class="cat" value="sinator-ratings-shows" checked> Oblíbené seriály</label>
+    <label><input type="checkbox" id="wantLists" checked> 📁 Moje složky (všechny)</label>
+  </fieldset>
+
   <button onclick="build()">Vygenerovat odkaz</button>
   <div id="out"></div>
   <p class="hint">Tenhle doplněk poskytuje jen katalogy a metadata (co koukáš, watchlist, rozkoukané, hodnocení, vlastní složky) — samotné zdroje na přehrání pořád řeší tvůj stávající sinator-nuvio-addon nebo jiný stream addon.</p>
 <script>
+function toBase64Url(str){
+  let b64 = btoa(str);
+  return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
 function build(){
   const key = document.getElementById('key').value.trim();
   if(!key) return;
-  const url = location.origin + '/' + encodeURIComponent(key) + '/manifest.json';
+  const cats = [...document.querySelectorAll('.cat:checked')].map(el => el.value);
+  const allChecked = cats.length === document.querySelectorAll('.cat').length;
+  const config = {
+    key,
+    // Pokud je zaškrtnuto úplně vše, radši pošleme prázdné pole (= "všechny",
+    // ať se nově přidané katalogy v budoucnu ukážou samy bez nutnosti
+    // odkaz znovu generovat).
+    cats: allChecked ? [] : cats,
+    lists: document.getElementById('wantLists').checked,
+  };
+  const encoded = toBase64Url(JSON.stringify(config));
+  const url = location.origin + '/' + encoded + '/manifest.json';
   document.getElementById('out').innerHTML =
     '<p>Adresa addonu:</p><code>'+url+'</code>' +
     '<a class="install" href="stremio://'+url.replace(/^https?:\/\//,'')+'">📲 Instalovat do Stremio</a>' +

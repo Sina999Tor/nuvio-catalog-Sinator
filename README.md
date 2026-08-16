@@ -21,9 +21,10 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
      jinde.
 4. Deploy.
 5. Otevři `https://tvuj-addon.vercel.app/`, vlož API klíč ze
-   sinator-backendu (stejný jako `x-api-key`), vygeneruj odkaz.
-6. Tenhle odkaz (`.../<klíč>/manifest.json`) nainstaluj do Stremia tlačítkem,
-   nebo v Nuviu přidej stejnou URL ručně jako zdroj addonu.
+   sinator-backendu (stejný jako `x-api-key`), zaškrtni katalogy, které chceš
+   v Nuviu/Stremiu vidět, a vygeneruj odkaz.
+6. Tenhle odkaz (`.../<config>/manifest.json`) nainstaluj do Stremia
+   tlačítkem, nebo v Nuviu přidej stejnou URL ručně jako zdroj addonu.
 
 ## Jak to funguje
 
@@ -37,10 +38,15 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
 
 ## Poznámky
 
-- API klíč je součástí URL (standardní způsob konfigurace Stremio addonů) —
-  neposílej tenhle odkaz nikomu jinému.
+- API klíč je součástí URL (zabalený spolu s výběrem katalogů do jednoho
+  base64 configu) — neposílej tenhle odkaz nikomu jinému.
+- Katalogy si vybíráš zaškrtnutím na configurační stránce — pokud necháš
+  všechny zaškrtnuté, nově přidané katalogy (kdybych jich časem přidal víc)
+  se objeví samy, bez nutnosti odkaz znovu generovat.
 - "Oblíbené" v katalozích = `/api/ratings` z backendu (žádný samostatný
   endpoint pro oblíbené v backendu není).
 - U historie seriálů se slučují záznamy `history:shows` (celý seriál
   označený shlédnutý) i `history:episodes` (jednotlivé epizody) — zobrazí se
   jako jeden řádek za seriál, seřazeno podle posledního shlédnutí.
+- U watchlistu se poster/název berou primárně z backendu (pokud je appka
+  uložila); pokud chybí, doplní se z TMDB stejně jako u ostatních katalogů.
