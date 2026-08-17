@@ -90,3 +90,7 @@ prázdný.
   znovu stáhne z TMDB (obnoví se tak případně změněný poster/hodnocení).
 - Po přidání spousty nových položek do backendu je dobré znovu spustit
   "Prohřát cache", ať se i ty nové objeví v Nuviu hned s metadaty.
+- Čtení/zápis do Redis jde po dávkách max. 200 klíčů na jeden request (limit
+  Upstash pipeline) — u katalogů s tisícovkami položek by jeden obří request
+  se všemi klíči najednou spadl a tvářil se, že cache je prázdná, i kdyby
+  byla plně prohřátá.
