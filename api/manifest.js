@@ -54,12 +54,17 @@ module.exports = async function handler(req, res) {
   }
 
   // Moje složky = dynamické, natáhneme si je při generování manifestu.
-  // Dá se úplně vypnout přepínačem "lists" v configu.
+  // config.lists může být:
+  //   true / undefined  -> všechny složky (výchozí, zpětně kompatibilní)
+  //   false              -> žádné složky
+  //   [id, id, ...]      -> jen vybrané složky
   const wantLists = config.lists !== false;
+  const selectedListIds = Array.isArray(config.lists) ? new Set(config.lists.map(String)) : null;
   if (wantLists) {
     try {
       const lists = await backendFetch(BASE_URL, config.key, '/api/lists');
       for (const list of lists || []) {
+        if (selectedListIds && !selectedListIds.has(String(list.id))) continue;
         manifest.catalogs.push({
           type: 'movie',
           id: `sinator-list-${list.id}-movie`,
