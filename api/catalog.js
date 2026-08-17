@@ -1,5 +1,5 @@
 const { backendFetch } = require('../lib/backend');
-const { tmdbFetchMany } = require('../lib/tmdb');
+const { tmdbFetchManyPreserveOrder } = require('../lib/tmdb');
 const { decodeConfig } = require('../lib/config');
 
 const BASE_URL = process.env.SINATOR_BACKEND_URL || 'https://sinator-backend.vercel.app';
@@ -49,7 +49,8 @@ function latestUniqueIds(items, tsField) {
 
 // Watchlist v backendu má title/poster uložené jen když je appka poslala
 // při přidání — pokud chybí poster_path, dotáhneme ho z TMDB stejně jako
-// u ostatních katalogů, ale zachováme původní pořadí (podle added_at).
+// u ostatních katalogů, ale zachováme původní pořadí (podle added_at) a
+// počet (žádné tiché zahazování, viz komentář u tmdbFetchManyPreserveOrder).
 async function watchlistMetas(items, kind) {
   const withPoster = [];
   const missingIds = [];
@@ -57,7 +58,7 @@ async function watchlistMetas(items, kind) {
     if (it.poster_path) withPoster.push(it);
     else missingIds.push(String(it.id));
   }
-  const fetched = await tmdbFetchMany(TMDB_KEY, kind, missingIds);
+  const fetched = await tmdbFetchManyPreserveOrder(TMDB_KEY, kind, missingIds);
   const byId = new Map();
   withPoster.forEach((it) => byId.set(String(it.id), watchlistToMeta(it)));
   fetched.forEach((m) => {
@@ -98,14 +99,14 @@ module.exports = async function handler(req, res) {
     if (id === 'sinator-history-movies') {
       const items = await fetchAllHistory(apiKey, 'movies');
       const pageIds = latestUniqueIds(items, 'watched_at').slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-history-shows') {
       const [shows, episodes] = await Promise.all([
         fetchAllHistory(apiKey, 'shows'),
         fetchAllHistory(apiKey, 'episodes'),
       ]);
       const pageIds = latestUniqueIds([...(shows || []), ...(episodes || [])], 'watched_at').slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'tv', pageIds);
     } else if (id === 'sinator-watchlist-movies' || id === 'sinator-watchlist-series') {
       const wantType = id === 'sinator-watchlist-movies' ? 'movie' : 'tv';
       const items = await backendFetch(BASE_URL, apiKey, '/api/watchlist');
@@ -117,25 +118,25 @@ module.exports = async function handler(req, res) {
     } else if (id === 'sinator-progress-movies') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/progress?type=movies');
       const pageIds = (items || []).map((i) => i.id).slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-progress-shows') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/progress?type=shows');
       const pageIds = (items || []).map((i) => i.id).slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'tv', pageIds);
     } else if (id === 'sinator-ratings-movies') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/ratings?type=movies');
       const pageIds = (items || [])
         .sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0))
         .map((i) => i.id)
         .slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'movie', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'movie', pageIds);
     } else if (id === 'sinator-ratings-shows') {
       const items = await backendFetch(BASE_URL, apiKey, '/api/ratings?type=shows');
       const pageIds = (items || [])
         .sort((a, b) => (b.rated_at || 0) - (a.rated_at || 0))
         .map((i) => i.id)
         .slice(skip, skip + PAGE_SIZE);
-      metas = await tmdbFetchMany(TMDB_KEY, 'tv', pageIds);
+      metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, 'tv', pageIds);
     } else if (id && id.startsWith('sinator-list-')) {
       const m = id.match(/^sinator-list-(.+)-(movie|series)$/);
       if (m) {
@@ -147,7 +148,7 @@ module.exports = async function handler(req, res) {
           .sort((a, b) => (b.added_at || 0) - (a.added_at || 0))
           .map((i) => i.id)
           .slice(skip, skip + PAGE_SIZE);
-        metas = await tmdbFetchMany(TMDB_KEY, wantType, pageIds);
+        metas = await tmdbFetchManyPreserveOrder(TMDB_KEY, wantType, pageIds);
       }
     }
 
