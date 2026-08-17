@@ -38,31 +38,82 @@
 
   <button onclick="build()">Vygenerovat odkaz</button>
   <div id="out"></div>
+
+  <fieldset>
+    <legend>🔥 Prohřát cache</legend>
+    <p style="margin-top:0;font-size:14px;">
+      Nuvio bohužel u velkých seznamů (stovky+ položek) nedonačítá další
+      stránky samo — proto je potřeba metadata z TMDB natáhnout předem a
+      uložit do trvalé cache. Udělej to jednou po instalaci a po každém
+      větším přidání položek do seznamů.
+    </p>
+    <button onclick="warmAll()">Spustit prohřátí</button>
+    <div id="warmOut" style="margin-top:10px;font-size:14px;"></div>
+  </fieldset>
+
   <p class="hint">Tenhle doplněk poskytuje jen katalogy a metadata (co koukáš, watchlist, rozkoukané, hodnocení, vlastní složky) — samotné zdroje na přehrání pořád řeší tvůj stávající sinator-nuvio-addon nebo jiný stream addon.</p>
 <script>
 function toBase64Url(str){
   let b64 = btoa(str);
   return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function build(){
+function currentConfig(){
   const key = document.getElementById('key').value.trim();
-  if(!key) return;
+  if(!key) return null;
   const cats = [...document.querySelectorAll('.cat:checked')].map(el => el.value);
   const allChecked = cats.length === document.querySelectorAll('.cat').length;
-  const config = {
+  return {
     key,
-    // Pokud je zaškrtnuto úplně vše, radši pošleme prázdné pole (= "všechny",
-    // ať se nově přidané katalogy v budoucnu ukážou samy bez nutnosti
-    // odkaz znovu generovat).
     cats: allChecked ? [] : cats,
     lists: document.getElementById('wantLists').checked,
   };
+}
+function build(){
+  const config = currentConfig();
+  if(!config){ return; }
   const encoded = toBase64Url(JSON.stringify(config));
   const url = location.origin + '/' + encoded + '/manifest.json';
   document.getElementById('out').innerHTML =
     '<p>Adresa addonu:</p><code>'+url+'</code>' +
     '<a class="install" href="stremio://'+url.replace(/^https?:\/\//,'')+'">📲 Instalovat do Stremio</a>' +
     '<p class="hint">V Nuvio přidej stejnou adresu ručně jako zdroj addonu (obvykle v sekci Nastavení → Addony → Přidat vlastní URL).</p>';
+}
+async function warmAll(){
+  const config = currentConfig();
+  const out = document.getElementById('warmOut');
+  if(!config){ out.innerHTML = '⚠️ Nejdřív vlož API klíč nahoře.'; return; }
+  const encoded = toBase64Url(JSON.stringify(config));
+
+  out.innerHTML = 'Načítám seznam katalogů…';
+  let manifest;
+  try {
+    manifest = await (await fetch(location.origin + '/' + encoded + '/manifest.json')).json();
+  } catch (e) {
+    out.innerHTML = '⚠️ Nepodařilo se načíst manifest — zkontroluj API klíč.';
+    return;
+  }
+  const catalogIds = (manifest.catalogs || []).map(c => c.id);
+  if (!catalogIds.length) { out.innerHTML = '⚠️ Žádné katalogy k prohřátí.'; return; }
+
+  for (const catId of catalogIds) {
+    let offset = 0, done = false, total = 0;
+    while (!done) {
+      out.innerHTML = `Prohřívám: ${catId} (${offset}${total ? '/' + total : ''})…`;
+      let data;
+      try {
+        const r = await fetch(`/api/warm?key=${encoded}&id=${encodeURIComponent(catId)}&offset=${offset}`);
+        data = await r.json();
+      } catch (e) {
+        out.innerHTML = `⚠️ Chyba u ${catId}, pokračuju dál…`;
+        break;
+      }
+      if (data.error) { out.innerHTML = `⚠️ ${catId}: ${data.error}`; break; }
+      done = data.done;
+      total = data.total;
+      offset = data.warmed;
+    }
+  }
+  out.innerHTML = '✅ Hotovo — cache je prohřátá. Katalogy by teď měly být v Nuviu/Stremiu kompletní.';
 }
 </script>
 </body>

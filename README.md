@@ -12,29 +12,60 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
 
 1. Nahraj tenhle obsah do nového GitHub repa (např. `sinator-nuvio-catalog`).
 2. Import do Vercelu jako nový projekt.
-3. V nastavení projektu (Environment Variables) přidej:
+3. Založ si zdarma Redis databázi na [upstash.com](https://upstash.com)
+   (klidně novou, samostatnou od té, co používá `sinator-backend). V sekci
+   REST API najdeš `UPSTASH_REDIS_REST_URL` a `UPSTASH_REDIS_REST_TOKEN`.
+4. V nastavení Vercel projektu (Environment Variables) přidej:
    - `TMDB_API_KEY` — tvůj TMDB API klíč (povinné — bez něj katalogy kromě
      watchlistu nebudou mít poster/název, protože backend si u historie/
      rozkoukanosti/hodnocení/složek ukládá jen tmdb_id, ne plná metadata).
+   - `UPSTASH_REDIS_REST_URL` a `UPSTASH_REDIS_REST_TOKEN` — trvalá cache
+     pro TMDB metadata (viz "Proč Redis" níže). Bez nich addon pořád funguje,
+     ale u velkých seznamů (stovky+ položek) nespolehlivě.
    - `SINATOR_BACKEND_URL` — volitelné, výchozí je
      `https://sinator-backend.vercel.app`. Nastav, jen pokud backend běží
      jinde.
-4. Deploy.
-5. Otevři `https://tvuj-addon.vercel.app/`, vlož API klíč ze
+5. Deploy.
+6. Otevři `https://tvuj-addon.vercel.app/`, vlož API klíč ze
    sinator-backendu (stejný jako `x-api-key`), zaškrtni katalogy, které chceš
    v Nuviu/Stremiu vidět, a vygeneruj odkaz.
-6. Tenhle odkaz (`.../<config>/manifest.json`) nainstaluj do Stremia
+7. Klikni na **"Spustit prohřátí"** — natáhne TMDB metadata pro všechno, co
+   máš v backendu, a uloží je do Redis cache. U velkých seznamů to může
+   chvíli trvat (stránka ukazuje průběh), nech ji otevřenou, dokud nenapíše
+   "Hotovo".
+8. Tenhle odkaz (`.../<config>/manifest.json`) nainstaluj do Stremia
    tlačítkem, nebo v Nuviu přidej stejnou URL ručně jako zdroj addonu.
+
+## Proč Redis (a proč ne stránkování)
+
+Nuvio (na rozdíl od standardního Stremia) u vlastních addonů spolehlivě
+nedonačítá další "stránky" katalogu (parametr `skip`) — u seznamu s 1000+
+položkami se tak zastaví na první stránce a zbytek prostě nikdy nezobrazí.
+
+Řešení je proto otočené: `api/catalog.js` vždy vrací **celý** seznam najednou,
+ale rychle — protože metadata k jednotlivým titulům se čtou z Redis cache,
+ne z TMDB při každém požadavku. Cache se naplní tlačítkem "Prohřát cache" na
+configurační stránce (`api/warm.js`), které TMDB prochází po menších dávkách,
+ať se to vejde do limitu běhu funkce i u tisícovkových seznamů.
+
+Bez nastavené Redis cache addon pořád funguje (jen si TMDB natáhne za běhu),
+ale u větších seznamů riskuje, že požadavek nestihne doběhnout v limitu
+Vercel funkce (10 s na Hobby plánu) a katalog se v Nuviu ukáže neúplný nebo
+prázdný.
 
 ## Jak to funguje
 
 - `GET /:key/manifest.json` — natáhne `/api/lists` z backendu a pro každou
   tvou složku vygeneruje dva katalogy (filmy/seriály), plus 8 pevných
   katalogů (historie, watchlist, rozkoukané, hodnocení).
-- `GET /:key/catalog/:type/:id.json` — stáhne data z backendu
-  (`x-api-key: <key>`), pro položky bez uloženého titulu/posteru (vše kromě
-  watchlistu) je dotáhne z TMDB (jazyk `cs-CZ`).
+- `GET /:key/catalog/:type/:id.json` — zjistí kompletní seznam ID pro daný
+  katalog (`lib/catalogSources.js`), pro každé dotáhne metadata z Redis
+  cache / TMDB (`lib/tmdb.js`) a vrátí celý seznam najednou.
 - `GET /:key/meta/:type/:id.json` — plné detaily jedné položky z TMDB.
+- `GET /api/warm?key=...&id=...&offset=...` — interní endpoint pro
+  configurační stránku; zpracuje dávku ~250 položek daného katalogu a uloží
+  je do Redis cache. Volá se opakovaně s rostoucím `offset`, dokud
+  nevrátí `done: true`.
 
 ## Poznámky
 
@@ -52,9 +83,10 @@ používáš svůj stávající `sinator-nuvio-addon` (nebo jiný stream addon).
   uložila); pokud chybí, doplní se z TMDB stejně jako u ostatních katalogů.
 - Dotazy na TMDB jedou po dávkách (12 souběžně) s automatickým opakováním
   při rate-limitu (HTTP 429).
-- Katalogy jsou stránkované po 100 položkách (`skip` parametr) — u velkých
-  seznamů (stovky/tisíce položek) se první stránka natáhne během pár vteřin
-  a další se donačte samy při scrollování v Nuviu/Stremiu. Díky tomu to jede
-  spolehlivě i na Vercel Hobby plánu, který má tvrdý strop 10 s na běh jedné
-  funkce (nastavení `maxDuration: 60` v `vercel.json` mu na Hobby bez
-  zapnutého Fluid Compute nepomůže — proto stránkování, ne delší timeout).
+- Pokud se u nějakého ID nepovede najít metadata na TMDB (smazané ID, chybný
+  typ film/seriál apod.), addon ho nezahazuje, ale vrátí náhradní záznam jen
+  s ID (`#12345 (nedostupné na TMDB)`), místo aby ho tiše vynechal.
+- Cache v Redis má TTL 30 dní — po tý době se položka při dalším zobrazení
+  znovu stáhne z TMDB (obnoví se tak případně změněný poster/hodnocení).
+- Po přidání spousty nových položek do backendu je dobré znovu spustit
+  "Prohřát cache", ať se i ty nové objeví v Nuviu hned s metadaty.
