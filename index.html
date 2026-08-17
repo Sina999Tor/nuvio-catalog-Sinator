@@ -33,7 +33,17 @@
     <label><input type="checkbox" class="cat" value="sinator-progress-shows" checked> Rozkoukané seriály</label>
     <label><input type="checkbox" class="cat" value="sinator-ratings-movies" checked> Oblíbené filmy</label>
     <label><input type="checkbox" class="cat" value="sinator-ratings-shows" checked> Oblíbené seriály</label>
-    <label><input type="checkbox" id="wantLists" checked> 📁 Moje složky (všechny)</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>📁 Moje složky</legend>
+    <p id="listsHint" style="margin-top:0;font-size:14px;opacity:.75;">Vlož API klíč nahoře a načti seznam svých složek — pak si vybereš, které z nich se mají zobrazit jako katalogy.</p>
+    <button type="button" onclick="loadLists()">Načíst mé složky</button>
+    <span id="listsToggle" style="display:none;margin-left:8px;font-size:13px;">
+      <a href="#" onclick="setAllLists(true);return false;">vybrat vše</a> ·
+      <a href="#" onclick="setAllLists(false);return false;">zrušit vše</a>
+    </span>
+    <div id="listsBox" style="margin-top:8px;"></div>
   </fieldset>
 
   <button onclick="build()">Vygenerovat odkaz</button>
@@ -62,11 +72,55 @@ function currentConfig(){
   if(!key) return null;
   const cats = [...document.querySelectorAll('.cat:checked')].map(el => el.value);
   const allChecked = cats.length === document.querySelectorAll('.cat').length;
+
+  // Složky: dokud si je uživatel nenačte a nezaškrtá, chováme se jako
+  // dřív (všechny). Jakmile jsou načtené, pošleme buď true (všechny
+  // zaškrtnuté = beze změny), false (žádná), nebo pole vybraných ID.
+  const listBoxes = [...document.querySelectorAll('.listitem')];
+  let lists = true;
+  if (listBoxes.length) {
+    const checkedIds = listBoxes.filter(el => el.checked).map(el => el.value);
+    if (checkedIds.length === 0) lists = false;
+    else if (checkedIds.length === listBoxes.length) lists = true;
+    else lists = checkedIds;
+  }
+
   return {
     key,
     cats: allChecked ? [] : cats,
-    lists: document.getElementById('wantLists').checked,
+    lists,
   };
+}
+async function loadLists(){
+  const key = document.getElementById('key').value.trim();
+  const hint = document.getElementById('listsHint');
+  const box = document.getElementById('listsBox');
+  if(!key){ hint.textContent = '⚠️ Nejdřív vlož API klíč nahoře.'; return; }
+  hint.textContent = 'Načítám tvé složky…';
+  box.innerHTML = '';
+  let data;
+  try {
+    data = await (await fetch('/api/lists?key=' + encodeURIComponent(key))).json();
+  } catch (e) {
+    hint.textContent = '⚠️ Nepodařilo se načíst složky — zkus to znovu.';
+    return;
+  }
+  if (data.error) { hint.textContent = '⚠️ ' + data.error; return; }
+  const lists = data.lists || [];
+  if (!lists.length) {
+    hint.textContent = 'Žádné vlastní složky jsme nenašli.';
+    document.getElementById('listsToggle').style.display = 'none';
+    return;
+  }
+  hint.textContent = 'Vyber, které složky se mají zobrazit jako katalogy:';
+  document.getElementById('listsToggle').style.display = 'inline';
+  box.innerHTML = lists.map(l =>
+    '<label><input type="checkbox" class="listitem" value="'+String(l.id).replace(/"/g,'&quot;')+'" checked> 📁 '+
+    (l.name || l.id) + '</label>'
+  ).join('');
+}
+function setAllLists(checked){
+  document.querySelectorAll('.listitem').forEach(el => { el.checked = checked; });
 }
 function build(){
   const config = currentConfig();
