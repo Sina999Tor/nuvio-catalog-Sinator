@@ -20,12 +20,15 @@ module.exports = async function handler(req, res) {
 
   const manifest = {
     id: 'cz.sinator.nuvio.catalog',
-    version: '1.2.0',
+    version: '1.3.0',
     name: 'Sinator Katalogy',
     description: 'Katalogy z tvého Sinator backendu — sledované, watchlist, rozkoukané, hodnocení a vlastní složky.',
     resources: ['catalog', 'meta'],
     types: ['movie', 'series'],
-    idPrefixes: ['tmdb-'],
+    // 'tt' = skutečná IMDb ID (primární formát od chvíle, kdy lib/tmdb.js
+    // umí dohledat external_ids) — 'tmdb-' zůstává jako fallback pro
+    // tituly, které IMDb ID nemají (typicky nová/regionální produkce).
+    idPrefixes: ['tt', 'tmdb-'],
     catalogs: [],
     behaviorHints: { configurable: true, configurationRequired: !config || !config.key },
   };
