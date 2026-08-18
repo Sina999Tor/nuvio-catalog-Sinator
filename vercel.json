@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/catalog.js": { "maxDuration": 60 },
-    "api/warm.js": { "maxDuration": 60 }
+    "api/warm.js": { "maxDuration": 60 },
+    "api/meta.js": { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/manifest.json", "destination": "/api/manifest" },
