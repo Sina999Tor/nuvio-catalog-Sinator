@@ -25,10 +25,16 @@ module.exports = async function handler(req, res) {
     description: 'Katalogy z tvého Sinator backendu — sledované, watchlist, rozkoukané, hodnocení a vlastní složky.',
     resources: ['catalog', 'meta'],
     types: ['movie', 'series'],
-    // 'tt' = skutečná IMDb ID (primární formát od chvíle, kdy lib/tmdb.js
-    // umí dohledat external_ids) — 'tmdb-' zůstává jako fallback pro
-    // tituly, které IMDb ID nemají (typicky nová/regionální produkce).
-    idPrefixes: ['tt', 'tmdb-'],
+    // POZOR: idPrefixes tady neříká "naše ID jsou tt formát" — říká Nuvio
+    // "ptej se NÁS na meta u JAKÉHOKOLIV titulu s tt ID, odkudkoliv". Když
+    // jsme sem dřív přidali 'tt', Nuvio nás začalo zbytečně dotazovat i na
+    // tituly z úplně jiných katalogů, což zpomalilo vyhledávání streamů
+    // napříč celou appkou. Naše vlastní tituly ale i tak v odpovědích nesou
+    // skutečné "tt..." ID (viz lib/tmdb.js) — díky tomu je najdou externí
+    // stream-scraper doplňky (ty si idPrefix řeší samy podle ID položky,
+    // ne podle tohohle manifestu). Tady necháváme jen náš vlastní prefix,
+    // ať se nás Nuvio ptá pouze na náš vlastní obsah.
+    idPrefixes: ['tmdb-'],
     catalogs: [],
     behaviorHints: { configurable: true, configurationRequired: !config || !config.key },
   };
